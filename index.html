@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Driver/Loader Timeline</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
+  h1 { margin-bottom: 10px; font-size: 48px; }
+  #date { font-size: 48px; margin-right: 40px; }
+  #clock { font-size: 48px; margin-right: 40px; }
+  label { margin-left: 20px; font-size: 36px; }
+  input[type="number"] { width: 100px; margin-left: 10px; font-size: 36px; }
+  .timeline-wrapper { overflow-x: auto; }
+  .timeline-container { min-width: max-content; position: relative; }
+  .timeline { position: relative; display: flex; flex-wrap: nowrap; height: auto; border: 3px solid #ccc; background: #fff; margin-bottom: 0; }
+  .block { flex: 0 0 auto; height: 180px; border-right: 4px solid #999; cursor: pointer; background-color: #e0e0e0; position: relative; display: flex; flex-direction: column; }
+  .block:last-child { border-right: none; }
+  .half-block { flex: 1; border-bottom: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 18px; position: relative; }
+  .half-block:last-child { border-bottom: none; }
+  .block.break { background-color: #000 !important; cursor: not-allowed; color: #fff; display: flex; flex-direction: column; }
+  .time-indicator { position: absolute; top: 0; bottom: 0; width: 6px; background-color: red; z-index: 10; }
+  .label-row { display: flex; flex-wrap: nowrap; font-size: 28px; margin-top: 10px; margin-bottom: 60px; }
+  .label-row span { flex: 0 0 auto; text-align: center; }
+  button { margin-top: 40px; padding: 20px 30px; font-size: 28px; cursor: pointer; }
+  .count-tag { position: absolute; bottom: 2px; right: 2px; font-size: 14px; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 2px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>1st Shift DRIVER/LOADER Performance</h1>
+<div>
+  <span id="date"></span>
+  <span id="clock"></span>
+  <label for="taktTimeInput">Takt Time (min):</label>
+  <input type="number" id="taktTimeInput" value="6" min="1">
+</div>
+
+<h2 style="font-size: 36px;">DRIVER/LOADER
+  <select id="puller1Name" style="font-size: 36px;">
+    <option value="">-- Select DRIVER/LOADER --</option>
+    <option>Alex G.</option><option>Becky L.</option><option>Benjamin M.</option><option>Chinny T.</option>
+    <option>Fabian D.</option><option>Joel T.</option><option>John G.</option><option>John R.</option><option>Michael C.</option><option>Tayden V.</option>
+    <option>Tyler B.</option><option>Tom P.</option>
+  </select>
+</h2>
+<div class="timeline-wrapper">
+  <div class="timeline-container">
+    <div class="timeline" id="timeline1"></div>
+    <div class="time-indicator"></div>
+    <div class="label-row" id="labels1"></div>
+  </div>
+</div>
+
+<button onclick="downloadLogs()">Download Click Logs</button>
+<button onclick="location.reload()">Refresh Page</button>
+
+<script>
+const startHour = 7;
+const startMinute = 10;
+const endHour = 15;
+const breakTimes = [
+  { start: "09:30", end: "09:50" },
+  { start: "12:00", end: "12:30" },
+];
+let intervalMinutes = 6;
+const blockBaseWidth = 180;
+const pullerCounts = { timeline1: 0 };
+
+function toMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+function clearTimelines() {
+  document.getElementById("timeline1").innerHTML = "";
+  document.getElementById("labels1").innerHTML = "";
+}
+function generateTimeline(timelineId, labelId) {
+  const timeline = document.getElementById(timelineId);
+  const labelRow = document.getElementById(labelId);
+  let currentMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60;
+
+  while (currentMinutes < endMinutes) {
+    const breakBlock = breakTimes.find(b => currentMinutes === toMinutes(b.start));
+    if (breakBlock) {
+      const block = document.createElement("div");
+      block.classList.add("block", "break");
+      block.style.height = "180px";
+      block.style.width = ((toMinutes(breakBlock.end) - toMinutes(breakBlock.start)) / 6) * blockBaseWidth + "px";
+      block.textContent = "Break";
+      timeline.appendChild(block);
+
+      const label = document.createElement("span");
+      label.style.width = block.style.width;
+      label.textContent = `${breakBlock.start} - ${breakBlock.end}`;
+      labelRow.appendChild(label);
+
+      currentMinutes = toMinutes(breakBlock.end);
+      continue;
+    }
+
+    const width = (intervalMinutes / 6) * blockBaseWidth;
+    const block = document.createElement("div");
+    block.classList.add("block");
+    block.style.width = `${width}px`;
+
+    const halfBlocks = [];
+    ["upper", "lower"].forEach(() => {
+      const halfBlock = document.createElement("div");
+      halfBlock.classList.add("half-block");
+      halfBlock.style.backgroundColor = ""; // Start blank
+      halfBlocks.push(halfBlock);
+
+      halfBlock.onclick = (e) => {
+        e.stopPropagation();
+
+        // If already green, do nothing
+        if (halfBlock.style.backgroundColor === "rgb(0, 255, 0)") return;
+
+        // First click: set to yellow
+        if (halfBlock.style.backgroundColor !== "rgb(253, 253, 150)") {
+          halfBlock.style.backgroundColor = "#fdfd96"; // Yellow
+        }
+
+        // Add count and time
+        const now = new Date();
+        halfBlock.innerHTML = "";
+        pullerCounts[timelineId]++;
+        const countTag = document.createElement("div");
+        countTag.className = "count-tag";
+        countTag.textContent = `x${pullerCounts[timelineId]}`;
+        halfBlock.appendChild(countTag);
+        const timeTag = document.createElement("div");
+        timeTag.textContent = now.toLocaleTimeString();
+        halfBlock.appendChild(timeTag);
+
+        // If both upper and lower clicked yellow, turn both green
+        const bothClicked = halfBlocks.every(hb => hb.style.backgroundColor === "rgb(253, 253, 150)");
+        if (bothClicked) {
+          halfBlocks.forEach(hb => hb.style.backgroundColor = "#00ff00");
+        }
+      };
+      block.appendChild(halfBlock);
+    });
+    timeline.appendChild(block);
+
+    const label = document.createElement("span");
+    label.style.width = `${width}px`;
+    const labelHour = Math.floor(currentMinutes / 60);
+    const labelMin = currentMinutes % 60;
+    const ampm = labelHour >= 12 ? "PM" : "AM";
+    const hour12 = labelHour % 12 === 0 ? 12 : labelHour % 12;
+    label.textContent = `${hour12}:${String(labelMin).padStart(2, "0")} ${ampm}`;
+    labelRow.appendChild(label);
+
+    currentMinutes += intervalMinutes;
+  }
+}
+function scrollToCurrentTimeIndicator() {
+  const wrapper = document.querySelector(".timeline-wrapper");
+  const container = wrapper.querySelector(".timeline-container");
+  const indicator = container.querySelector(".time-indicator");
+  if (indicator && indicator.style.left !== "-10px") {
+    const indicatorX = indicator.offsetLeft;
+    const wrapperWidth = wrapper.clientWidth;
+    const targetScrollLeft = indicatorX - (wrapperWidth / 2);
+    setTimeout(() => {
+      wrapper.scrollTo({ left: targetScrollLeft, behavior: "smooth" });
+    }, 100);
+  }
+}
+function updateIndicators() {
+  const container = document.querySelector(".timeline-container");
+  const now = new Date();
+  const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = startHour * 60 + startMinute;
+  const totalMinutes = (endHour * 60) - startMinutes;
+  const elapsed = currentMinutesNow - startMinutes;
+  const percent = (elapsed / totalMinutes) * 100;
+
+  const indicator = container.querySelector(".time-indicator");
+  indicator.style.left = elapsed >= 0 && elapsed <= totalMinutes ? percent + "%" : "-10px";
+  scrollToCurrentTimeIndicator();
+}
+document.getElementById("taktTimeInput").addEventListener("change", () => {
+  intervalMinutes = parseInt(document.getElementById("taktTimeInput").value);
+  clearTimelines();
+  generateTimeline("timeline1", "labels1");
+  updateIndicators();
+});
+function updateClock() {
+  const now = new Date();
+  document.getElementById("date").textContent = now.toLocaleDateString();
+  document.getElementById("clock").textContent = now.toLocaleTimeString();
+}
+setInterval(updateClock, 1000);
+setInterval(updateIndicators, 60000);
+updateClock();
+generateTimeline("timeline1", "labels1");
+updateIndicators();
+
+// Updated: Removed Section column from downloaded CSV
+function downloadLogs() {
+  const now = new Date();
+  const dateString = now.toISOString().split("T")[0];
+  let csv = "Name,Time Clicked\n";  // Removed Section column
+  const name = document.getElementById("puller1Name").value || "N/A";
+  const timeline = document.getElementById("timeline1");
+  const blocks = timeline.querySelectorAll(".half-block");
+  blocks.forEach((halfBlock) => {
+    if (halfBlock.style.backgroundColor === "rgb(135, 206, 235)" || halfBlock.style.backgroundColor === "rgb(0, 255, 0)") {
+      const timeDiv = halfBlock.querySelector("div:last-child");
+      if (timeDiv) {
+        csv += `${name},${timeDiv.textContent}\n`;  // Only Name and Time Clicked
+      }
+    }
+  });
+  const blob = new Blob([csv], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `click_logs_${dateString}.csv`;
+  link.click();
+}
+window.addEventListener("beforeunload", function (e) {
+  e.preventDefault();
+  e.returnValue = "";
+});
+const autoDownloadTimes = ["09:30", "12:00", "15:00"];
+function checkAutoDownload() {
+  const now = new Date();
+  const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  if (autoDownloadTimes.includes(currentTime)) {
+    downloadLogs();
+  }
+}
+setInterval(checkAutoDownload, 60000);
+</script>
+</body>
+</html>
